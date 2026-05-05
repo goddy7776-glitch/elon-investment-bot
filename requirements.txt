@@ -1,4 +1,5 @@
 pyTelegramBotAPI
 pycountry
 python-dotenv
+pytonconnect==0.3.0
 emoji-country-flag 

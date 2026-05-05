@@ -216,3 +216,12 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+# Sensitive environment variables
+.env
+
+# Local database file
+bot_data.json
+
+# Temporary files
+__pycache__/
+*.pyc

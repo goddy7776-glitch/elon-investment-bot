@@ -5,16 +5,14 @@ import json
 import os
 from datetime import datetime
 os.getenv('API_TOKEN')
-MY_BTC = '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
+MY_TON COIN= '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
 CHANGELY = 'https://changelly.com/'
 DB_FILE = "bot_data.json"
 import os
 from dotenv import load_dotenv
 load_dotenv() # This loads the variables
 API_TOKEN = os.getenv('API_TOKEN') # This gets the token from Render
-
 bot = telebot.TeleBot(API_TOKEN)
-
 # --- DATABASE LOGIC ---
 def load_data():
     if os.path.exists(DB_FILE):
@@ -173,7 +171,7 @@ def handle_callbacks(c):
 
     elif c.data.startswith("inv_"):
         amt = int(c.data.split("_")[1])
-        msg = f"📥 **Plan Selected: ${amt}**\n\nTo begin, copy the BTC address below and fund it. \n\nBTC Address:\n`{MY_BTC}`\n\nLink:\n{CHANGELY}\n\n*After funding, notify the admin via the Help section.*"
+        msg = f"📥 **Plan Selected: ${amt}**\n\nTo begin, copy the TON address below and fund it. \n\nTON Address:\n`{MY_TON COIN}`\n\nLink:\n{CHANGELY}\n\"
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back to Dashboard", callback_data="main_dash"))
         bot.edit_message_text(msg, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
 

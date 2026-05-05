@@ -178,4 +178,4 @@ def handle_callbacks(c):
     save_data(db)
 
 print("ElonmuskinvestmentBot started...")
-bot.infinity_polling()
+bot.infinity_polling()        

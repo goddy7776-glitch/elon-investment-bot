@@ -5,9 +5,14 @@ import json
 import os
 from datetime import datetime
 os.getenv('API_TOKEN')
-MY_BTC = 'your_bitcoin_address_here'
+MY_BTC = '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
 CHANGELY = 'https://changelly.com/'
 DB_FILE = "bot_data.json"
+import os
+from dotenv import load_dotenv
+
+load_dotenv() # This loads the variables
+API_TOKEN = os.getenv('API_TOKEN') # This gets the token from Render
 
 bot = telebot.TeleBot(API_TOKEN)
 

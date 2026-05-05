@@ -10,7 +10,6 @@ CHANGELY = 'https://changelly.com/'
 DB_FILE = "bot_data.json"
 import os
 from dotenv import load_dotenv
-
 load_dotenv() # This loads the variables
 API_TOKEN = os.getenv('API_TOKEN') # This gets the token from Render
 
